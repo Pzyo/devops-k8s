@@ -1,0 +1,161 @@
+{% extends 'index.html' %}
+
+{% block title %}statefulset{% endblock %}
+
+{% block css %}
+<style>
+    .layui-table-cell {
+        height: 100%;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+<span class="layui-breadcrumb">
+  <a href="/">首页</a>
+  <a href="#">工作负载</a>
+  <a><cite>StatefulSets</cite></a>
+</span>
+
+<hr class="layui-border-cyan">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <div class="layui-row">
+            <input type="text" name="name" class="layui-input" style="width: 150px;height: 30px;float: left;margin-right: 10px">
+            <button class="layui-btn layui-btn-sm" lay-event="stsSearch" style="float: left" id="stsSearch">搜索</button>
+            <button class="layui-btn layui-btn-sm" lay-event="stsAdd" style="float: right">新增</button>
+        </div>
+        <table id="stsTable" lay-filter="stsTable"></table>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+
+<script type="text/html" id="stsEdit">
+  <a class="layui-btn layui-btn-xs layui-btn-primary" lay-event="stsYAML">查看YAML</a>
+  <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="stsDel">删除</a>
+</script>
+
+<script>
+layui.use('table', function(){
+  var table = layui.table;
+  var $ = layui.jquery;
+  table.render({
+    elem: '#stsTable'
+    ,url: "{% url 'workload_statefulset_api' %}" //数据接口
+    ,page: true //开启分页
+    ,toolbar: '#stsTable' //开启头部工具栏，并为其绑定左侧模板
+    ,defaultToolbar: ['filter', 'exports', 'print', { //自定义头部工具栏右侧图标。如无需自定义，去除该参数即可
+      title: '提示'
+      ,layEvent: 'LAYTABLE_TIPS'
+      ,icon: 'layui-icon-tips'
+    }]
+    ,cols: [[ //表头
+      {field: 'name', title: '名称', sort: true}
+      ,{field: 'namespace', title: '命名空间'}
+      ,{field: 'replicas', title: '可用/预期副本'}
+      ,{field: 'labels', title: '标签', templet: labelsFormat}
+      ,{field: 'containers', title: '容器', templet: containersFormat}
+      ,{field: 'selector', title: '选择器', templet: selectorFormat}
+      ,{field: 'create_time', title: '创建时间'}
+      ,{title:'操作', toolbar: '#stsEdit'}
+    ]]
+    ,id: 'stsTable'
+    ,where: {
+      namespace: sessionStorage.getItem('namespace')
+    }
+  });
+  // 标签格式化
+  function labelsFormat(d) {
+    result = "";
+    if (d.labels == null) {
+        return ""
+    } else {
+      for (let key in d.labels) {
+        result += '<button type="button" class="layui-btn layui-btn-normal layui-btn-xs">' + key + ':' + d.labels[key] + '</button><br>'
+      }
+      return result
+    }
+  }
+  // 容器格式化
+  function containersFormat(d){
+    result = "";
+    if (d.containers == null) {
+      return ""
+    } else {
+      for (let c in d.containers) {
+        result += '<button type="button" class="layui-btn layui-btn-normal layui-btn-xs">' + c + ':' + d.containers[c] + '</button><br>'
+      }
+      return result
+    }
+  }
+  // 选择器格式化
+  function selectorFormat(d){
+    result = "";
+    if (d.selector == null) {
+      return ""
+    } else {
+      for (let s in d.selector) {
+        result += '<button type="button" class="layui-btn layui-btn-normal layui-btn-xs">' + s + ':' + d.selector[s] + '</button><br>'
+      }
+      return result
+    }
+  }
+  //监听行工具事件
+  table.on('tool(stsTable)', function(obj){
+    var data = obj.data;
+
+    if(obj.event === 'stsDel'){
+      layer.confirm('你真的要删除' + data.name + '吗?', function(index){
+        var csrf_token = $('[name="csrfmiddlewaretoken"]').val();
+        $.ajax({
+          type: "DELETE",
+          url: "{% url 'workload_statefulset_api' %}",
+          data: data,
+          headers: {'X-CSRFToken': csrf_token},
+          success: function (res) {
+            if(res.code === 0){
+              obj.del();  // 删除当前页面数据
+              layer.msg(res.msg, {icon: 6, time: 3000})
+            } else {
+              layer.msg(res.msg, {icon: 5, time: 3000})
+            }
+          },
+          error: function () {
+            layer.open({
+                type: 0,
+                title: ['异常信息'],
+                content: "服务器接口异常!"
+            })
+          }
+        });
+        layer.close(index);
+      });
+    } else if(obj.event === 'stsYAML'){
+        // 查看YAML
+        layer.open({
+            title: "YAML"
+            ,type: 2
+            ,area: ["50%", "60%"]
+            ,content: "{% url 'ace' %}?resource=statefulset" + '&namespace=' + data.namespace + '&name=' + data.name
+            ,scrollbar: false
+            ,fixed: false
+        })
+    }
+  });
+
+  // 监听搜索事件
+  $('#stsSearch').on('click', function () {
+    var search_key = $('input[name="name"]').val();
+    table.reload('stsTable', {
+      where: {
+        search_key: search_key
+      } //设定异步数据接口的额外参数
+    });
+  })
+});
+</script>
+{% endblock %}

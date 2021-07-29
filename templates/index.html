@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <title>{% block title %}首页{% endblock %}</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'layui/css/layui.css' %}">
+    {% block css %}{% endblock %}
+</head>
+<body>
+<div class="layui-layout layui-layout-admin ">
+    <div class="layui-header layui-bg-cyan">
+    <div class="layui-logo layui-hide-xs layui-bg-cyan ">DevOps管理系统</div>
+    <!-- 头部区域（可配合layui 已有的水平导航） -->
+    <ul class="layui-nav layui-layout-left">
+    <!-- 移动端显示 -->
+        <li class="layui-nav-item layui-show-xs-inline-block layui-hide-sm" lay-header-event="menuLeft">
+            <i class="layui-icon layui-icon-spread-left"></i>
+        </li>
+        <li class="layui-nav-item">
+            <select name="namespace" lay-verify="" lay-search class="layui-select" id="nsSelect">
+                <option value="" disabled>请选择命名空间</option>
+            </select>
+        </li>>
+    </ul>
+
+    <ul class="layui-nav layui-layout-right">
+        <li class="layui-nav-item">
+            <a href=""><img src="//t.cn/RCzsdCq" class="layui-nav-img">我</a>
+            <dl class="layui-nav-child">
+                <dd><a href="javascript:;">个人信息</a></dd>
+                <dd><a href="javascript:;">设置</a></dd>
+                <dd><a href="/logout">退出登录</a></dd>
+            </dl>
+        </li>
+    </ul>
+</div>
+
+<div class="layui-side layui-bg-black ">
+    <div class="layui-side-scroll layui-bg-cyan">
+<!-- 左侧导航区域（可配合layui已有的垂直导航） -->
+        <ul class="layui-nav layui-nav-tree layui-bg-cyan" lay-filter="test">
+            <li class="layui-nav-item">
+                <a href="/">
+                    <i class="layui-icon layui-icon-home"></i>&nbsp;&nbsp;平台概述
+                </a>
+            </li>
+            <li class="layui-nav-item">
+                <a href="javascript:;">
+                    <i class="layui-icon layui-icon-template-1"></i>
+                    &nbsp;&nbsp;Kubernetes
+                </a>
+                <dl class="layui-nav-child">
+                    <dd><a href="{% url 'k8s_node' %}">Nodes</a></dd>
+                    <dd><a href="{% url 'k8s_namespace' %}">Namespaces</a></dd>
+                    <dd><a href="{% url 'k8s_pv' %}">PersistentVolumes</a></dd>
+                </dl>
+            </li>
+            <li class="layui-nav-item">
+                <a href="javascript:;">
+                    <i class="layui-icon layui-icon-component"></i>
+                    &nbsp;&nbsp;工作负载
+                </a>
+                <dl class="layui-nav-child">
+                    <dd><a href="{% url 'workload_deployment' %}">Deployments</a></dd>
+                    <dd><a href="{% url 'workload_daemonset' %}">DaemonSets</a></dd>
+                    <dd><a href="{% url 'workload_statefulset' %}">StatefulSets</a></dd>
+                    <dd><a href="{% url 'workload_pod' %}">Pods</a></dd>
+                </dl>
+            </li>
+            <li class="layui-nav-item">
+                <a href="javascript:;">
+                    <i class="layui-icon layui-icon-app"></i>
+                    &nbsp;&nbsp;负载均衡
+                </a>
+                <dl class="layui-nav-child">
+                    <dd><a href="{% url 'loadbalancer_services' %}">Services</a></dd>
+                    <dd><a href="{% url 'loadbalancer_ingresses' %}">Ingresses</a></dd>
+                </dl>
+            </li>
+            <li class="layui-nav-item">
+                <a href="javascript:;">
+                    <i class="layui-icon layui-icon-file-b"></i>
+                    &nbsp;&nbsp;存储与配置
+                </a>
+                <dl class="layui-nav-child">
+                    <dd><a href="{% url 'storage_persistentvolumeclaims' %}">PersistentVolumeClaims</a></dd>
+                    <dd><a href="{% url 'storage_configmap' %}">ConfigMaps</a></dd>
+                    <dd><a href="{% url 'storage_secrets' %}">Secrets</a></dd>
+                </dl>
+            </li>
+        </ul>
+    </div>
+</div>
+
+  <div class="layui-body" style="background-color: #eeeeee">
+    <!-- 内容主体区域 -->
+    <div style="padding: 15px;">{% block content %}{% endblock %}</div>
+
+  </div>
+
+  <div class="layui-footer" style="text-align: center">
+    <!-- 底部固定区域 -->
+  </div>
+</div>
+<script src="{% static 'layui/layui.js' %}"></script>
+<script>
+//JS
+layui.use(['element', 'layer', 'util'], function(){
+    var layer = layui.layer;
+    var $ = layui.jquery;
+    $.ajax({
+        type: "GET",
+        url: "{% url 'k8s_namespace_api' %}",
+        async: false,   // 取消异步
+        success: function (res) {
+            if(res.code === 0){
+                for (let index in res.data){
+                    let name = res.data[index].name
+                    $('#nsSelect').append('<option value=' + name + '>' + name + '</option>')
+                }
+                // 设置默认命名空间
+                $('#nsSelect').val('default')
+            } else {
+                layer.open({
+                    type: 0,
+                    title: ['命名空间查询失败'],
+                    content: res.msg
+                })
+            }
+        },
+        error: function () {
+            layer.open({
+                type: 0,
+                title: ['异常信息'],
+                content: "获取命名空间列表失败!"
+            })
+        }
+    });
+    // 将当前选择的命名空间保存到本地浏览器的session存储, 以便其他页面能够获取到当前选择的命名空间
+    var storage = window.sessionStorage;
+    var namespace = storage.getItem('namespace');
+    var current_ns = $('#nsSelect').val(); // 获取选择的值
+
+    // 如果本地存储为空, 将当前命名空间存储
+    if (namespace == null) {
+        storage.setItem('namespace', current_ns); // 添加键值
+    } else {
+        $('#nsSelect').val(namespace);
+    }
+
+    // 选择命名空间触发
+    $('#nsSelect').change(function () {
+        current_ns = $('#nsSelect').val();
+        storage.setItem('namespace', current_ns);
+        location.reload();
+    })
+});
+</script>
+{% block js %}
+{% endblock %}
+</body>
+</html>

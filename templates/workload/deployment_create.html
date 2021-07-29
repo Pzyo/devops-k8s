@@ -1,0 +1,170 @@
+{#<!DOCTYPE html>#}
+{#<html lang="en">#}
+{#<head>#}
+{#    <meta charset="UTF-8">#}
+{#    <title>Title</title>#}
+{#    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.5.1/jquery.min.js"></script>#}
+    {% load static %}
+    <link href="{% static 'layui/css/layui.css' %}" rel="stylesheet">
+    <script src="{% static 'layui/layui.js' %}"></script>
+{#</head>#}
+{#<body>#}
+<div id="Cpv">
+    {% csrf_token %}
+    <form class="layui-form" action="" id="fpv">
+      <div class="layui-form-item">
+        <label class="layui-form-label">Deployment名称</label>
+        <div class="layui-input-inline" style="width: 70%">
+          <input type="text" name="deployName" lay-verify="required" autocomplete="off" class="layui-input">
+        </div>
+      </div>
+       <div class="layui-form-item">
+        <label class="layui-form-label">标签</label>
+        <div class="layui-input-inline" style="width: 70%">
+          <input type="text" name="deployLabels" lay-verify="required" autocomplete="off" class="layui-input" placeholder="app:demo1,project:demo2">
+        </div>
+        <div class="layui-form-mid layui-word-aux">多个标签使用","分隔</div>
+      </div>
+      <div class="layui-form-item">
+        <label class="layui-form-label">镜像名称</label>
+        <div class="layui-input-inline" style="width: 70%">
+          <input type="text" name="imageName" lay-verify="required" autocomplete="off" class="layui-input">
+        </div>
+      </div>
+      <div class="layui-form-item">
+        <label class="layui-form-label">镜像Tag</label>
+        <div class="layui-input-inline" style="width: 70%">
+          <input type="text" name="imagesTag" lay-verify="title" autocomplete="off" class="layui-input">
+        </div>
+      </div>
+      <div class="layui-form-item">
+          <label class="layui-form-label">镜像拉取策略</label>
+          <div class="layui-input-block" style="width: 25%">
+            <select name="imagePullPolicy" lay-verify="required">
+              <option value="IfNotPresent" selected>优先使用本地镜像(IfNotPresent)</option>
+              <option value="Always">总是拉取镜像(Always)</option>
+              <option value="Never">仅使用本地镜像(Never)</option>
+            </select>
+          </div>
+      </div>
+
+      <div class="layui-form-item">
+          <label class="layui-form-label">命名空间</label>
+          <div class="layui-input-inline">
+            <select name="namespace" lay-verify="required" lay-search class="layui-select" id="deploySelect"></select>
+          </div>
+      </div>
+      <div class="layui-form-item">
+        <label class="layui-form-label">副本数</label>
+        <div class="layui-input-block" style="width: 25%">
+          <input type="radio" name="replicas" value="1" title="1" checked="" lay-filter="pvCapacityRadio">
+          <input type="radio" name="replicas" value="2" title="2" lay-filter="pvCapacityRadio">
+          <input type="radio" name="replicas" value="3" title="3" lay-filter="pvCapacityRadio">
+          <input type="radio" name="replicas" value="自定义" title="自定义" lay-filter="pvCapacityRadio" id="udefine">
+          <input type="text" id="udefineR" name="ureplicas" lay-verify="ureplicas" placeholder="请输入数量" autocomplete="off" class="layui-input layui-hide">
+        </div>
+      </div>
+
+      <div class="layui-form-item">
+        <label class="layui-form-label">资源限制</label>
+        <div class="layui-form-mid layui-word-aux">CPU</div>
+        <div class="layui-input-inline">
+          <input type="text" name="limitCpu" required lay-verify="" placeholder="如: 0.5 或 500m" autocomplete="off" class="layui-input">
+        </div>
+        <div class="layui-form-mid layui-word-aux">内存</div>
+        <div class="layui-input-inline">
+          <input type="text" name="limitMem" required lay-verify="" placeholder="如: 500Mi 或 1Gi" autocomplete="off" class="layui-input">
+        </div>
+      </div>
+      <div class="layui-form-item">
+        <label class="layui-form-label">所需资源</label>
+        <div class="layui-form-mid layui-word-aux">CPU</div>
+        <div class="layui-input-inline">
+          <input type="text" name="requestCpu" lay-verify="" placeholder="如: 0.5 或 500m" autocomplete="off" class="layui-input">
+        </div>
+        <div class="layui-form-mid layui-word-aux">内存</div>
+        <div class="layui-input-inline">
+          <input type="text" name="requestMem" lay-verify="" placeholder="如: 500Mi 或 1Gi" autocomplete="off" class="layui-input">
+        </div>
+      </div>
+
+      <div class="layui-form-item">
+        <div class="layui-input-block">
+          <button class="layui-btn" lay-submit lay-filter="pvCForm">创建</button>
+          <button class="layui-btn layui-btn-primary" id="pvReset">重置</button>
+        </div>
+      </div>
+    </form>
+</div>
+
+<script>
+layui.use(['form', 'element', 'layer', 'util', 'laytpl', 'layedit'], function(){
+  var form = layui.form;
+  var $ = layui.jquery;
+  var t = 0;
+  var namespace = window.sessionStorage.getItem('namespace');
+
+  $.get('{% url 'k8s_namespace_api' %}', function (data) {
+    if (data.code === 0) {
+      for (let i in data.data){
+        let name = data.data[i].name;
+        let html = '';
+
+        if (name === namespace) {
+          html = '<option value=' + name + ' selected' + '>' + name + '</option>';
+        } else {
+          html = '<option value=' + name + '>' + name + '</option>';
+        }
+        $("#deploySelect").append(html);
+      }
+      var form = layui.form;
+      form.render();
+    }
+  });
+
+  form.on('submit(pvCForm)', function (data) {
+    data = data.field;
+    var csrf_token = $('[name="csrfmiddlewaretoken"]').val();
+    $.ajax({
+        type: "POST",
+        url: "{% url 'workload_deployment_api' %}",
+        data: data,
+        headers: {'X-CSRFToken': csrf_token},
+        success: function (res) {
+          if(res.code === 0){
+            layer.msg(res.msg, {icon: 6, time: 3000})
+          } else {
+            layer.msg(res.msg, {icon: 5, time: 3000})
+          }
+        },
+        error: function () {
+          layer.open({
+            type: 0,
+            title: ['异常信息'],
+            content: "服务器接口异常!"
+          })
+        }
+    });
+    return false;
+  });
+
+  form.on('radio(pvCapacityRadio)', function(data){
+    if (data.value === '自定义') {
+      if (t === 0){
+        $('#udefineC').removeClass('layui-hide');
+        t++;
+      }
+    } else {
+        $('#udefineC').addClass('layui-hide');
+        t = 0
+    }
+  });
+
+  $('#pvReset').on('click', function () {
+    location.reload();
+  });
+});
+</script>
+
+{#</body>#}
+{#</html>#}

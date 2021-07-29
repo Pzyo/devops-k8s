@@ -1,0 +1,184 @@
+{% extends 'index.html' %}
+
+{% block title %}services{% endblock %}
+
+{% block css %}
+<style>
+    .layui-table-cell {
+        height: 100%;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+<span class="layui-breadcrumb">
+  <a href="/">首页</a>
+  <a href="#">负载均衡</a>
+  <a><cite>Services</cite></a>
+</span>
+
+<hr class="layui-border-cyan">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <div class="layui-row">
+            <input type="text" name="name" class="layui-input" style="width: 150px;height: 30px;float: left;margin-right: 10px">
+            <button class="layui-btn layui-btn-sm" lay-event="svcSearch" style="float: left" id="svcSearch">搜索</button>
+            <button class="layui-btn layui-btn-sm" lay-event="svcAdd" style="float: right">新增</button>
+        </div>
+        <table id="svcTable" lay-filter="svcTable"></table>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+
+<script type="text/html" id="svcEdit">
+  <a class="layui-btn layui-btn-xs layui-btn-primary" lay-event="svcYAML">查看YAML</a>
+  <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="svcDel">删除</a>
+</script>
+
+<script>
+layui.use('table', function(){
+  var table = layui.table;
+  var $ = layui.jquery;
+  table.render({
+    elem: '#svcTable'
+    ,url: "{% url 'loadbalancer_services_api' %}" //数据接口
+    ,page: true //开启分页
+    ,toolbar: '#svcTable' //开启头部工具栏，并为其绑定左侧模板
+    ,defaultToolbar: ['filter', 'exports', 'print', { //自定义头部工具栏右侧图标。如无需自定义，去除该参数即可
+      title: '提示'
+      ,layEvent: 'LAYTABLE_TIPS'
+      ,icon: 'layui-icon-tips'
+    }]
+    ,cols: [[ //表头
+      {field: 'name', title: '名称', sort: true}
+      ,{field: 'labels', title: '标签', templet: labelsFormat}
+      ,{field: 'type', title: '类型', width: 100}
+      ,{field: 'cluster_ip', title: '集群IP'}
+      {#,{field: 'svc_ports', title: '端口', templet: portsFormat}#}
+      ,{field: 'selector', title: '选择器', templet:labelsFormat}
+      ,{field: 'endpoint', title: '内部端点', templet: endpointFormat}
+      ,{field: 'create_time', title: '创建时间'}
+      ,{title:'操作', toolbar: '#svcEdit'}
+    ]]
+    ,id: 'svcTable'
+    ,where: {
+      namespace: sessionStorage.getItem('namespace')
+    }
+  });
+  // 标签格式化
+  function labelsFormat(d) {
+    result = "";
+    if (d.labels == null) {
+        return ""
+    } else {
+      for (let key in d.labels) {
+        result += '<button type="button" class="layui-btn layui-btn-normal layui-btn-xs">' + key + ':' + d.labels[key] + '</button><br>'
+      }
+      return result
+    }
+  }
+  // 容器格式化
+  function portsFormat(d){
+    result = "";
+    tmp = "";
+    if (d.svc_ports == null) {
+      return "-"
+    } else {
+      for (let p in d.svc_ports) {
+        data = d.svc_ports[p];
+        {#console.log(data);#}
+        tmp += 'SVC端口：' + data.p_port + '<br>'
+               + 'Pod端口：' + data.target_port + '<br>'
+               + '协议：' + data.p_protocol + '<br>'
+               + '端口名称：' + data.p_name;
+        if (data.node_port !== 'None') {
+            tmp += '<br>' + '暴露端口：' + data.node_port
+        }
+
+        result += '<button type="button" class="layui-btn-primary layui-border-orange" style="text-align: left">' + tmp + '</button><br>'
+        tmp = ""
+      }
+
+      return result
+    }
+  }
+  // 状态格式化
+  function endpointFormat(d) {
+    result = "";
+    {#console.log(d)#}
+    if (d.endpoint == null && d.svc_ports == null) {
+      return "-"
+    } else {
+      for (let p in d.svc_ports) {
+        for (let ep in d.endpoint) {
+          data = d.svc_ports[ep];
+          if (d.svc_ports[p].node_port !== 'None') {
+            result += d.endpoint[ep] + ':' + d.svc_ports[p].target_port + ' --> ' + d.svc_ports[p].node_port + '<br>'
+          } else {
+            result += d.endpoint[ep] + ':' + d.svc_ports[p].target_port + '<br>'
+          }
+        }
+      return result
+      }
+    }
+  }
+
+  //监听行工具事件
+  table.on('tool(svcTable)', function(obj){
+    var data = obj.data;
+
+    if(obj.event === 'svcDel'){
+      layer.confirm('你真的要删除' + data.name + '吗?', function(index){
+        var csrf_token = $('[name="csrfmiddlewaretoken"]').val();
+        $.ajax({
+          type: "DELETE",
+          url: "{% url 'loadbalancer_services_api' %}",
+          data: data,
+          headers: {'X-CSRFToken': csrf_token},
+          success: function (res) {
+            if(res.code === 0){
+              obj.del();  // 删除当前页面数据
+              layer.msg(res.msg, {icon: 6, time: 3000})
+            } else {
+              layer.msg(res.msg, {icon: 5, time: 3000})
+            }
+          },
+          error: function () {
+            layer.open({
+                type: 0,
+                title: ['异常信息'],
+                content: "服务器接口异常!"
+            })
+          }
+        });
+        layer.close(index);
+      });
+    } else if(obj.event === 'svcYAML'){
+        // 查看YAML
+        layer.open({
+            title: "YAML"
+            ,type: 2
+            ,area: ["50%", "60%"]
+            ,content: "{% url 'ace' %}?resource=service" + '&namespace=' + data.namespace + '&name=' + data.name
+            ,scrollbar: false
+            ,fixed: false
+        })
+    }
+  });
+
+  // 监听搜索事件
+  $('#svcSearch').on('click', function () {
+    var search_key = $('input[name="name"]').val();
+    table.reload('svcTable', {
+      where: {
+        search_key: search_key
+      } //设定异步数据接口的额外参数
+    });
+  })
+});
+</script>
+{% endblock %}

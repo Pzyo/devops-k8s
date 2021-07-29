@@ -1,0 +1,186 @@
+{% extends 'index.html' %}
+
+{% block title %}namespaces{% endblock %}
+
+{% block css %}
+<style>
+    .layui-table-cell {
+        height: 100%;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+<span class="layui-breadcrumb">
+  <a href="/">首页</a>
+  <a href="#">Kubernetes</a>
+  <a><cite>Namespaces</cite></a>
+</span>
+
+<hr class="layui-border-cyan">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <div class="layui-row">
+            <input type="text" name="name" class="layui-input" style="width: 150px;height: 30px;float: left;margin-right: 10px">
+            <button class="layui-btn layui-btn-sm" lay-event="nsSearch" style="float: left" id="nsSearch">搜索</button>
+            <button class="layui-btn layui-btn-sm" lay-event="nsAdd" style="float: right" id="nsAdd">新增</button>
+        </div>
+        <table id="nsTable" lay-filter="nsTable"></table>
+    </div>
+</div>
+
+<div style="display: none" id="ck">
+    <form class="layui-form" action="" >
+      <div class="layui-form-item">
+        <label class="layui-form-label">名称:</label>
+        <div class="layui-input-block">
+          <input type="text" name="namespace" lay-verify="title" autocomplete="off" placeholder="defaults" class="layui-input" style="width: 90%">
+        </div>
+      </div>
+      <div class="layui-form-item">
+        <div class="layui-input-block">
+          <button type="submit" class="layui-btn" lay-submit="" lay-filter="createNS">立即提交</button>
+          <button type="reset" class="layui-btn layui-btn-primary">重置</button>
+        </div>
+      </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block js %}
+
+<script type="text/html" id="nsEdit">
+  <a class="layui-btn layui-btn-xs layui-btn-primary" lay-event="nsYAML">查看YAML</a>
+  <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="nsDel">删除</a>
+</script>
+
+<script>
+layui.use(['table','form'], function(){
+  var table = layui.table;
+  var form = layui.form;
+  var $ = layui.jquery;
+  table.render({
+    elem: '#nsTable'
+    ,url: "{% url 'k8s_namespace_api' %}" //数据接口
+    ,page: true //开启分页
+    ,toolbar: '#nsTable' //开启头部工具栏，并为其绑定左侧模板
+    ,defaultToolbar: ['filter', 'exports', 'print', { //自定义头部工具栏右侧图标。如无需自定义，去除该参数即可
+      title: '提示'
+      ,layEvent: 'LAYTABLE_TIPS'
+      ,icon: 'layui-icon-tips'
+    }]
+    ,cols: [[ //表头
+      {field: 'name', title: '命名空间', width: 200, sort: true}
+      ,{field: 'labels', title: '标签', templet: labelsFormat}
+      ,{field: 'create_time', title: '创建时间'}
+      ,{title:'操作', toolbar: '#nsEdit'}
+    ]]
+    ,id: 'nsTable'
+  });
+  // 标签格式化
+  function labelsFormat(d) {
+    result = "";
+    if (d.labels == null) {
+        return ""
+    } else {
+        for (let key in d.labels) {
+            result += '<button type="button" class="layui-btn layui-btn-normal layui-btn-xs">' + key + ':' + d.labels[key] + '</button><br>'
+        }
+        return result
+    }
+  }
+  //监听行工具事件
+  table.on('tool(nsTable)', function(obj){
+    var data = obj.data;
+
+    if(obj.event === 'nsDel'){
+      layer.confirm('你真的要删除' + data.name + '命名空间吗?', function(index){
+        var csrf_token = $('[name="csrfmiddlewaretoken"]').val();
+        $.ajax({
+          type: "DELETE",
+          url: "{% url 'k8s_namespace_api' %}",
+          data: data,
+          headers: {'X-CSRFToken': csrf_token},
+          success: function (res) {
+            if(res.code === 0){
+              obj.del();  // 删除当前页面数据
+              layer.msg(res.msg, {icon: 6, time: 3000})
+            } else {
+              layer.msg(res.msg, {icon: 5, time: 3000})
+            }
+          },
+          error: function () {
+            layer.open({
+                type: 0,
+                title: ['异常信息'],
+                content: "服务器接口异常!"
+            })
+          }
+        });
+        layer.close(index);
+      });
+    } else if(obj.event === 'nsYAML'){
+      // 查看YAML
+      layer.open({
+        title: "YAML"
+        ,type: 2
+        ,area: ["50%", "60%"]
+        ,content: "{% url 'ace' %}?resource=namespace" + '&namespace=' + data.namespace + '&name=' + data.name
+        ,scrollbar: false
+        ,fixed: false
+      })
+    }
+  });
+
+  // 监听搜索事件
+  $('#nsSearch').on('click', function () {
+    var search_key = $('input[name="name"]').val();
+    table.reload('nsTable', {
+      where: {
+        search_key: search_key
+      } //设定异步数据接口的额外参数
+    });
+  });
+
+  // 监听创建事件
+  $('#nsAdd').on('click',function () {
+    layer.open({
+      title: "创建命名空间"
+      ,type: 1
+      ,content: $('#ck').html()
+      ,area: '40%'
+      ,success: function (layero, index) {
+        form.on('submit(createNS)', function (data) {
+          data = data.field;
+          var csrf_token = $('[name="csrfmiddlewaretoken"]').val();
+          $.ajax({
+            type: "POST",
+            url: "{% url 'k8s_namespace_api' %}",
+            data: data,
+            headers: {'X-CSRFToken': csrf_token},
+            success: function (res) {
+              if(res.code === 0){
+                layer.msg(res.msg, {icon: 6, time: 3000})
+                location.reload();
+              } else {
+                layer.msg(res.msg, {icon: 5, time: 3000})
+              }
+            },
+            error: function () {
+              layer.open({
+                type: 0,
+                title: ['异常信息'],
+                content: "服务器接口异常!"
+              })
+            }
+          });
+          return false;
+        })
+      }
+    })
+  });
+});
+
+</script>
+{% endblock %}
