@@ -21,7 +21,7 @@ from dashboard import views
 urlpatterns = [
     # url(r'^admin/', admin.site.urls),
     url(r'^$',views.index),
-    url(r'^node_resource$',views.index, name='node_resource'),
+    url(r'^node_resource$',views.node_resource, name='node_resource'),
 
     url(r'login$',views.login),
     url(r'logout$',views.logout),
