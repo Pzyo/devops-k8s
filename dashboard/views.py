@@ -1,13 +1,56 @@
 from django.shortcuts import render,redirect
 from django.http import JsonResponse
-from devops_k8s.k8s import auth_check, self_login_required, load_auth_config
+from devops_k8s.k8s import auth_check, self_login_required, load_auth_config, dt_format
 import hashlib, random
 from dashboard.models import User
 from kubernetes import client
+from dashboard import node_data
 
 @self_login_required
 def index(request):
-    return render(request, 'index.html')
+    auth_type = request.session.get("auth_type")
+    token = request.session.get("token")
+    load_auth_config(auth_type, token)
+    core_api = client.CoreV1Api()
+
+    # 命名空间：ajax从接口获取动态渲染
+    # 计算资源（echart）：ajax从接口获取动态渲染
+    # 存储资源：下面获取，模板渲染
+    # 节点状态：下面获取，模板渲染
+
+    node_resource = node_data.node_resource(core_api)
+    pv_list = []
+    for pv in core_api.list_persistent_volume().items:
+        pv_name = pv.metadata.name
+        capacity = pv.spec.capacity["storage"]  # 返回字典对象
+        access_modes = pv.spec.access_modes
+        reclaim_policy = pv.spec.persistent_volume_reclaim_policy
+        status = pv.status.phase
+        if pv.spec.claim_ref is not None:
+            pvc_ns = pv.spec.claim_ref.namespace
+            pvc_name = pv.spec.claim_ref.name
+            claim = "%s/%s" %(pvc_ns,pvc_name)
+        else:
+            claim = "未关联PVC"
+        storage_class = pv.spec.storage_class_name
+        create_time = dt_format(pv.metadata.creation_timestamp)
+
+        data = {"pv_name": pv_name, "capacity": capacity, "access_modes": access_modes,
+                "reclaim_policy": reclaim_policy, "status": status,
+                "claim": claim,"storage_class": storage_class,"create_time": create_time}
+        pv_list.append(data)
+
+    return render(request, 'index.html', {"node_resource": node_resource, "pv_list": pv_list})
+
+# 计算资源（echart）
+def node_resource(request):
+    auth_type = request.session.get("auth_type")
+    token = request.session.get("token")
+    load_auth_config(auth_type, token)
+    core_api = client.CoreV1Api()
+
+    res = node_data.node_resource(core_api)
+    return JsonResponse(res)
 
 def login(request):
     if request.method == 'POST':

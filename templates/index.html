@@ -211,7 +211,7 @@
                     <div class="layui-card-header">节点状态</div>
                     <div class="layui-card-body" style="height: 400px;overflow: auto;">
                           {% for k,v in node_resource.items %}
-                          <a href="{% url "node_details" %}?node_name={{ k }}">
+                          <a href="{% url "k8s_node_detail" %}?node_name={{ k }}">
                           <div class="node">
                               <div class="layui-card-header">{{ k }}</div>
                               <div class="layui-card-body" style="line-height: 30px">
@@ -308,8 +308,8 @@ layui.use(['element', 'layer', 'util'], function(){
 </script>
 {% block js %}
 {% load static %}
-<script src="{% static 'js/node-chart-index.js' %}"></script>
 <script src="{% static 'js/echarts.min.js' %}"></script>
+<script src="{% static 'js/node-chart-index.js' %}"></script>
 
 <script>
 
